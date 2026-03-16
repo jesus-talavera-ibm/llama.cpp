@@ -612,13 +612,10 @@ int32_t llm_chat_apply_template(
             }
         }
     } else if (tmpl == LLM_CHAT_TEMPLATE_GRANITE) {
-        // IBM Granite template (3.x / 4.x)
-        // ref: https://huggingface.co/ibm-granite/granite-3.3-2B-Instruct
-        // ref: https://huggingface.co/ibm-granite/granite-4.0-tiny-preview
+        // IBM Granite template
         for (const auto & message : chat) {
             std::string role(message->role);
             if (role == "assistant_tool_call") {
-                // Tool call messages use the "assistant" role with a <|tool_call|> prefix
                 ss << "<|start_of_role|>assistant<|end_of_role|><|tool_call|>";
             } else {
                 ss << "<|start_of_role|>" << role << "<|end_of_role|>";
