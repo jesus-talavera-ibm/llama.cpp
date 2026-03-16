@@ -679,6 +679,77 @@ int main_automated_tests(void) {
         }
     }
 
+    // Test Granite template with assistant_tool_call role
+    // Verifies the fix: assistant_tool_call maps to <|start_of_role|>assistant<|end_of_role|><|tool_call|>
+    // instead of the old broken <|start_of_role|>assistant_tool_call<|end_of_role|><|tool_call|>
+    {
+        std::cout << "\n\n=== Granite assistant_tool_call fix ===\n\n";
+
+        std::vector<llama_chat_message> tool_conversation {
+            {"system",               "You are a helpful assistant"},
+            {"user",                 "What is the weather?"},
+            {"assistant_tool_call",  "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]"},
+            {"tool_response",        "{\"temperature\": 72}"},
+        };
+
+        // Use the Granite 3.0 template string (detected as GRANITE by presence of <|start_of_role|>)
+        const char * granite_tmpl = "{%- for message in messages %}\n"
+            "    {%- if message['role'] == 'assistant_tool_call' %}\n"
+            "    {{- '<|start_of_role|>assistant<|end_of_role|><|tool_call|>' + message['content'] + '<|end_of_text|>\\n' }}\n"
+            "    {%- else %}\n"
+            "    {{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|end_of_text|>\\n' }}\n"
+            "    {%- endif %}\n"
+            "    {%- if loop.last and add_generation_prompt %}\n"
+            "    {{- '<|start_of_role|>assistant<|end_of_role|>' }}\n"
+            "    {%- endif %}\n"
+            "{%- endfor %}";
+
+        std::string expected =
+            "<|start_of_role|>system<|end_of_role|>You are a helpful assistant<|end_of_text|>\n"
+            "<|start_of_role|>user<|end_of_role|>What is the weather?<|end_of_text|>\n"
+            "<|start_of_role|>assistant<|end_of_role|><|tool_call|>"
+            "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]<|end_of_text|>\n"
+            "<|start_of_role|>tool_response<|end_of_role|>{\"temperature\": 72}<|end_of_text|>\n"
+            "<|start_of_role|>assistant<|end_of_role|>";
+
+        // Test C++ template path
+        formatted_chat.resize(2048);
+        res = llama_chat_apply_template(
+            granite_tmpl,
+            tool_conversation.data(),
+            tool_conversation.size(),
+            true,
+            formatted_chat.data(),
+            formatted_chat.size()
+        );
+        formatted_chat.resize(res);
+        std::string output(formatted_chat.data(), formatted_chat.size());
+        if (output != expected) {
+            std::cout << "Expected:\n" << expected << "\n";
+            std::cout << "-------------------------\n";
+            std::cout << "Actual:\n" << output << "\n";
+            std::cout.flush();
+            assert(output == expected);
+        }
+        std::cout << "  C++ template: PASS\n";
+
+        // Test Jinja template path
+        std::vector<common_chat_msg> tool_messages;
+        tool_messages.reserve(tool_conversation.size());
+        for (const auto & msg : tool_conversation) {
+            tool_messages.push_back(simple_msg(msg.role, msg.content));
+        }
+        auto jinja_output = format_using_common(granite_tmpl, "", "", tool_messages);
+        if (jinja_output != expected) {
+            std::cout << "Expected (jinja):\n" << expected << "\n";
+            std::cout << "-------------------------\n";
+            std::cout << "Actual (jinja):\n" << jinja_output << "\n";
+            std::cout.flush();
+            assert(jinja_output == expected);
+        }
+        std::cout << "  Jinja template: PASS\n";
+    }
+
     std::cout << "\nOK: All tests passed successfully.\n";
 
     return 0;

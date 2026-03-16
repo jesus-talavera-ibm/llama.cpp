@@ -1532,6 +1532,16 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
     }
 
     {
+        // IBM Granite 4.0 (with available_tools role for tool definitions)
+        auto tst = peg_tester("models/templates/ibm-granite-granite-4.0-tiny-preview.jinja", detailed_debug);
+
+        tst.test("Hello, world!\nWhat's up?").expect(message_assist).run();
+
+        // Note: tool call parsing (via <|tool_call|> prefix) is not yet supported by the
+        // auto-parser PEG grammar. Users should use --jinja for full tool calling support.
+    }
+
+    {
         // ByteDance-Seed-OSS (reasoning and tool calling model)
         auto tst = peg_tester("models/templates/ByteDance-Seed-OSS.jinja", detailed_debug);
 
