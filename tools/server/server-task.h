@@ -432,6 +432,7 @@ struct server_task_result_cmpl_partial : server_task_result {
     std::string oai_resp_reasoning_id;
     std::string oai_resp_message_id;
     std::string oai_resp_fc_id;
+    int         oai_resp_output_index = 0;
 
     // for Anthropic API: track if any reasoning content has been generated
     bool anthropic_has_reasoning = false;
