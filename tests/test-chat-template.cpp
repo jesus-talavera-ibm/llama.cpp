@@ -354,7 +354,7 @@ int main_automated_tests(void) {
         std::string bos_token = "";
         std::string eos_token = "";
         bool supported_with_jinja = true;
-        std::vector<llama_chat_message> custom_conversation = {};
+        std::vector<llama_chat_message> extra_conversation = {};
     };
     std::vector<TestCase> test_cases {
         {
@@ -614,7 +614,7 @@ int main_automated_tests(void) {
             /* .bos_token= */ "",
             /* .eos_token= */ "",
             /* .supported_with_jinja= */ true,
-            /* .custom_conversation= */ {{"user", "What is the weather?"}, {"assistant_tool_call", "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]"}, {"tool_response", "{\"temperature\": 72}"}},
+            /* .extra_conversation= */ {{"user", "What is the weather?"}, {"assistant_tool_call", "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]"}, {"tool_response", "{\"temperature\": 72}"}},
         },
         {
             /* .name= */ "ibm-granite/granite-4.0 (tool call)",
@@ -624,7 +624,7 @@ int main_automated_tests(void) {
             /* .bos_token= */ "",
             /* .eos_token= */ "",
             /* .supported_with_jinja= */ true,
-            /* .custom_conversation= */ {{"user", "What is the weather?"}, {"assistant_tool_call", "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}\n</tool_call>"}, {"tool_response", "{\"temperature\": 72}"}},
+            /* .extra_conversation= */ {{"user", "What is the weather?"}, {"assistant_tool_call", "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}\n</tool_call>"}, {"tool_response", "{\"temperature\": 72}"}},
         }
     };
     std::vector<char> formatted_chat(1024);
@@ -649,7 +649,7 @@ int main_automated_tests(void) {
     for (const auto & test_case : test_cases) {
         std::cout << "\n\n=== " << test_case.name << " ===\n\n";
         auto conv = conversation;
-        conv.insert(conv.end(), test_case.custom_conversation.begin(), test_case.custom_conversation.end());
+        conv.insert(conv.end(), test_case.extra_conversation.begin(), test_case.extra_conversation.end());
         formatted_chat.resize(2048);
         res = llama_chat_apply_template(
             test_case.template_str.c_str(),
@@ -682,7 +682,7 @@ int main_automated_tests(void) {
         std::cout << "\n\n=== " << test_case.name << " (jinja) ===\n\n";
         try {
             auto msgs = messages;
-            for (const auto & msg : test_case.custom_conversation) {
+            for (const auto & msg : test_case.extra_conversation) {
                 msgs.push_back(simple_msg(msg.role, msg.content));
             }
             auto output = format_using_common(
