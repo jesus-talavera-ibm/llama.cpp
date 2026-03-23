@@ -354,6 +354,7 @@ int main_automated_tests(void) {
         std::string bos_token = "";
         std::string eos_token = "";
         bool supported_with_jinja = true;
+        std::vector<llama_chat_message> custom_conversation = {};
     };
     std::vector<TestCase> test_cases {
         {
@@ -604,6 +605,26 @@ int main_automated_tests(void) {
             /* .expected_output_jinja= */ "<seed:bos>system\nYou are a helpful assistant<seed:eos><seed:bos>user\nHello<seed:eos><seed:bos>assistant\nHi there<seed:eos><seed:bos>user\nWho are you<seed:eos><seed:bos>assistant\nI am an assistant<seed:eos><seed:bos>user\nAnother question<seed:eos><seed:bos>assistant\n",
             /* .bos_token= */ "<seed:bos>",
             /* .eos_token= */ "<seed:eos>",
+        },
+        {
+            /* .name= */ "ibm-granite/granite-3.x (tool call)",
+            /* .template_str= */ "{%- for message in messages %}\n    {%- if message['role'] == 'assistant_tool_call' %}\n    {{- '<|start_of_role|>assistant<|end_of_role|><|tool_call|>' + message['content'] + '<|end_of_text|>\\n' }}\n    {%- else %}\n    {{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|end_of_text|>\\n' }}\n    {%- endif %}\n    {%- if loop.last and add_generation_prompt %}\n    {{- '<|start_of_role|>assistant<|end_of_role|>' }}\n    {%- endif %}\n{%- endfor %}",
+            /* .expected_output= */       "<|start_of_role|>system<|end_of_role|>You are a helpful assistant<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Hello<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>Hi there<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Who are you<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>   I am an assistant   <|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Another question<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>What is the weather?<|end_of_text|>\n<|start_of_role|>assistant_tool_call<|end_of_role|><|tool_call|>[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]<|end_of_text|>\n<|start_of_role|>tool_response<|end_of_role|>{\"temperature\": 72}<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>",
+            /* .expected_output_jinja= */ "<|start_of_role|>system<|end_of_role|>You are a helpful assistant<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Hello<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>Hi there<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Who are you<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>   I am an assistant   <|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Another question<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>What is the weather?<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|><|tool_call|>[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]<|end_of_text|>\n<|start_of_role|>tool_response<|end_of_role|>{\"temperature\": 72}<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>",
+            /* .bos_token= */ "",
+            /* .eos_token= */ "",
+            /* .supported_with_jinja= */ true,
+            /* .custom_conversation= */ {{"user", "What is the weather?"}, {"assistant_tool_call", "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]"}, {"tool_response", "{\"temperature\": 72}"}},
+        },
+        {
+            /* .name= */ "ibm-granite/granite-4.0 (tool call)",
+            /* .template_str= */ "{%- for message in messages %}\n    {%- if message['role'] == 'assistant_tool_call' %}\n    {{- '<|start_of_role|>assistant<|end_of_role|><|tool_call|>' + message['content'] + '<|end_of_text|>\\n' }}\n    {%- else %}\n    {{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|end_of_text|>\\n' }}\n    {%- endif %}\n    {%- if loop.last and add_generation_prompt %}\n    {{- '<|start_of_role|>assistant<|end_of_role|>' }}\n    {%- endif %}\n{%- endfor %}\n{# <tool_call> <tools> #}",
+            /* .expected_output= */       "<|start_of_role|>system<|end_of_role|>You are a helpful assistant<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Hello<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>Hi there<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Who are you<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>   I am an assistant   <|end_of_text|>\n<|start_of_role|>user<|end_of_role|>Another question<|end_of_text|>\n<|start_of_role|>user<|end_of_role|>What is the weather?<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|><|tool_call|><tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}\n</tool_call><|end_of_text|>\n<|start_of_role|>tool_response<|end_of_role|>{\"temperature\": 72}<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>",
+            /* .expected_output_jinja= */ "",
+            /* .bos_token= */ "",
+            /* .eos_token= */ "",
+            /* .supported_with_jinja= */ true,
+            /* .custom_conversation= */ {{"user", "What is the weather?"}, {"assistant_tool_call", "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}\n</tool_call>"}, {"tool_response", "{\"temperature\": 72}"}},
         }
     };
     std::vector<char> formatted_chat(1024);
@@ -627,11 +648,13 @@ int main_automated_tests(void) {
 
     for (const auto & test_case : test_cases) {
         std::cout << "\n\n=== " << test_case.name << " ===\n\n";
-        formatted_chat.resize(1024);
+        auto conv = conversation;
+        conv.insert(conv.end(), test_case.custom_conversation.begin(), test_case.custom_conversation.end());
+        formatted_chat.resize(2048);
         res = llama_chat_apply_template(
             test_case.template_str.c_str(),
-            conversation.data(),
-            conversation.size(),
+            conv.data(),
+            conv.size(),
             add_generation_prompt,
             formatted_chat.data(),
             formatted_chat.size()
@@ -658,11 +681,15 @@ int main_automated_tests(void) {
         }
         std::cout << "\n\n=== " << test_case.name << " (jinja) ===\n\n";
         try {
+            auto msgs = messages;
+            for (const auto & msg : test_case.custom_conversation) {
+                msgs.push_back(simple_msg(msg.role, msg.content));
+            }
             auto output = format_using_common(
                                 test_case.template_str,
                                 test_case.bos_token,
                                 test_case.eos_token,
-                                messages);
+                                msgs);
             auto expected_output = normalize_newlines(test_case.expected_output_jinja.empty() ? test_case.expected_output : test_case.expected_output_jinja);
             if (output != expected_output) {
                 std::cout << "Template:```\n" << test_case.template_str << "\n```";
@@ -677,155 +704,6 @@ int main_automated_tests(void) {
             std::cerr << "ERROR: " << e.what() << "\n";
             assert(false);
         }
-    }
-
-    // Test Granite 3.x template (LLM_CHAT_TEMPLATE_GRANITE_3_X) — backwards compatibility
-    // The 3.x C++ handler passes assistant_tool_call through as a literal role
-    {
-        std::cout << "\n\n=== Granite 3.x assistant_tool_call (backwards compat) ===\n\n";
-
-        std::vector<llama_chat_message> tool_conversation {
-            {"system",               "You are a helpful assistant"},
-            {"user",                 "What is the weather?"},
-            {"assistant_tool_call",  "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]"},
-            {"tool_response",        "{\"temperature\": 72}"},
-        };
-
-        // Granite 3.x template — no <tool_call> XML, detected as LLM_CHAT_TEMPLATE_GRANITE_3_X
-        const char * granite_3x_tmpl = "{%- for message in messages %}\n"
-            "    {%- if message['role'] == 'assistant_tool_call' %}\n"
-            "    {{- '<|start_of_role|>assistant<|end_of_role|><|tool_call|>' + message['content'] + '<|end_of_text|>\\n' }}\n"
-            "    {%- else %}\n"
-            "    {{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|end_of_text|>\\n' }}\n"
-            "    {%- endif %}\n"
-            "    {%- if loop.last and add_generation_prompt %}\n"
-            "    {{- '<|start_of_role|>assistant<|end_of_role|>' }}\n"
-            "    {%- endif %}\n"
-            "{%- endfor %}";
-
-        // 3.x C++ path: role is passed through literally (existing behavior preserved)
-        std::string expected_3x_cpp =
-            "<|start_of_role|>system<|end_of_role|>You are a helpful assistant<|end_of_text|>\n"
-            "<|start_of_role|>user<|end_of_role|>What is the weather?<|end_of_text|>\n"
-            "<|start_of_role|>assistant_tool_call<|end_of_role|><|tool_call|>"
-            "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]<|end_of_text|>\n"
-            "<|start_of_role|>tool_response<|end_of_role|>{\"temperature\": 72}<|end_of_text|>\n"
-            "<|start_of_role|>assistant<|end_of_role|>";
-
-        formatted_chat.resize(2048);
-        res = llama_chat_apply_template(
-            granite_3x_tmpl,
-            tool_conversation.data(),
-            tool_conversation.size(),
-            true,
-            formatted_chat.data(),
-            formatted_chat.size()
-        );
-        formatted_chat.resize(res);
-        std::string output_3x(formatted_chat.data(), formatted_chat.size());
-        if (output_3x != expected_3x_cpp) {
-            std::cout << "Expected:\n" << expected_3x_cpp << "\n";
-            std::cout << "-------------------------\n";
-            std::cout << "Actual:\n" << output_3x << "\n";
-            std::cout.flush();
-            assert(output_3x == expected_3x_cpp);
-        }
-        std::cout << "  Granite 3.x C++ template: PASS\n";
-
-        // 3.x Jinja path: Jinja handles the role correctly (template has the if/else)
-        std::string expected_3x_jinja =
-            "<|start_of_role|>system<|end_of_role|>You are a helpful assistant<|end_of_text|>\n"
-            "<|start_of_role|>user<|end_of_role|>What is the weather?<|end_of_text|>\n"
-            "<|start_of_role|>assistant<|end_of_role|><|tool_call|>"
-            "[{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}]<|end_of_text|>\n"
-            "<|start_of_role|>tool_response<|end_of_role|>{\"temperature\": 72}<|end_of_text|>\n"
-            "<|start_of_role|>assistant<|end_of_role|>";
-
-        std::vector<common_chat_msg> tool_messages;
-        tool_messages.reserve(tool_conversation.size());
-        for (const auto & msg : tool_conversation) {
-            tool_messages.push_back(simple_msg(msg.role, msg.content));
-        }
-        auto jinja_output_3x = format_using_common(granite_3x_tmpl, "", "", tool_messages);
-        if (jinja_output_3x != expected_3x_jinja) {
-            std::cout << "Expected (jinja):\n" << expected_3x_jinja << "\n";
-            std::cout << "-------------------------\n";
-            std::cout << "Actual (jinja):\n" << jinja_output_3x << "\n";
-            std::cout.flush();
-            assert(jinja_output_3x == expected_3x_jinja);
-        }
-        std::cout << "  Granite 3.x Jinja template: PASS\n";
-    }
-
-    // Test Granite 4.0 template (LLM_CHAT_TEMPLATE_GRANITE_4_0)
-    // Verifies: assistant_tool_call maps to <|start_of_role|>assistant<|end_of_role|><|tool_call|>
-    {
-        std::cout << "\n\n=== Granite 4.0 assistant_tool_call fix ===\n\n";
-
-        std::vector<llama_chat_message> tool_conversation {
-            {"system",               "You are a helpful assistant"},
-            {"user",                 "What is the weather?"},
-            {"assistant_tool_call",  "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}\n</tool_call>"},
-            {"tool_response",        "{\"temperature\": 72}"},
-        };
-
-        // Granite 4.0 template — contains <tool_call> XML, detected as LLM_CHAT_TEMPLATE_GRANITE_4_0
-        const char * granite_40_tmpl = "{%- for message in messages %}\n"
-            "    {%- if message['role'] == 'assistant_tool_call' %}\n"
-            "    {{- '<|start_of_role|>assistant<|end_of_role|><|tool_call|>' + message['content'] + '<|end_of_text|>\\n' }}\n"
-            "    {%- else %}\n"
-            "    {{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|end_of_text|>\\n' }}\n"
-            "    {%- endif %}\n"
-            "    {%- if loop.last and add_generation_prompt %}\n"
-            "    {{- '<|start_of_role|>assistant<|end_of_role|>' }}\n"
-            "    {%- endif %}\n"
-            "{%- endfor %}\n"
-            "{# <tool_call> <tools> #}";
-
-        std::string expected_40 =
-            "<|start_of_role|>system<|end_of_role|>You are a helpful assistant<|end_of_text|>\n"
-            "<|start_of_role|>user<|end_of_role|>What is the weather?<|end_of_text|>\n"
-            "<|start_of_role|>assistant<|end_of_role|><|tool_call|>"
-            "<tool_call>\n{\"name\": \"get_weather\", \"arguments\": {\"location\": \"NYC\"}}\n</tool_call><|end_of_text|>\n"
-            "<|start_of_role|>tool_response<|end_of_role|>{\"temperature\": 72}<|end_of_text|>\n"
-            "<|start_of_role|>assistant<|end_of_role|>";
-
-        // Test C++ template path
-        formatted_chat.resize(2048);
-        res = llama_chat_apply_template(
-            granite_40_tmpl,
-            tool_conversation.data(),
-            tool_conversation.size(),
-            true,
-            formatted_chat.data(),
-            formatted_chat.size()
-        );
-        formatted_chat.resize(res);
-        std::string output_40(formatted_chat.data(), formatted_chat.size());
-        if (output_40 != expected_40) {
-            std::cout << "Expected:\n" << expected_40 << "\n";
-            std::cout << "-------------------------\n";
-            std::cout << "Actual:\n" << output_40 << "\n";
-            std::cout.flush();
-            assert(output_40 == expected_40);
-        }
-        std::cout << "  Granite 4.0 C++ template: PASS\n";
-
-        // Test Jinja template path
-        std::vector<common_chat_msg> tool_messages;
-        tool_messages.reserve(tool_conversation.size());
-        for (const auto & msg : tool_conversation) {
-            tool_messages.push_back(simple_msg(msg.role, msg.content));
-        }
-        auto jinja_output_40 = format_using_common(granite_40_tmpl, "", "", tool_messages);
-        if (jinja_output_40 != expected_40) {
-            std::cout << "Expected (jinja):\n" << expected_40 << "\n";
-            std::cout << "-------------------------\n";
-            std::cout << "Actual (jinja):\n" << jinja_output_40 << "\n";
-            std::cout.flush();
-            assert(jinja_output_40 == expected_40);
-        }
-        std::cout << "  Granite 4.0 Jinja template: PASS\n";
     }
 
     std::cout << "\nOK: All tests passed successfully.\n";
