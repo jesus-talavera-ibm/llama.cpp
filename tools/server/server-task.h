@@ -110,6 +110,7 @@ struct task_result_state {
     const std::string oai_resp_reasoning_id;
     const std::string oai_resp_message_id;
     std::string oai_resp_fc_id; // function call ID for current args delta
+    int         oai_resp_output_index = 0; // sequential counter for output items
 
     task_result_state(const common_chat_parser_params & chat_parser_params)
         : chat_parser_params(chat_parser_params)

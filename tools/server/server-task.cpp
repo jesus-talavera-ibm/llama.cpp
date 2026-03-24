@@ -1381,6 +1381,7 @@ void server_task_result_cmpl_partial::update(task_result_state & state) {
     oai_resp_reasoning_id  = state.oai_resp_reasoning_id;
     oai_resp_message_id    = state.oai_resp_message_id;
     oai_resp_fc_id         = state.oai_resp_fc_id;
+    oai_resp_output_index  = state.oai_resp_output_index;
 
     // track if the accumulated message has any reasoning content
     anthropic_has_reasoning = !state.chat_msg.reasoning_content.empty();
@@ -1389,12 +1390,15 @@ void server_task_result_cmpl_partial::update(task_result_state & state) {
     for (const common_chat_msg_diff & diff : oaicompat_msg_diffs) {
         if (!diff.reasoning_content_delta.empty() && !state.thinking_block_started) {
             state.thinking_block_started = true;
+            state.oai_resp_output_index++;
         }
         if (!diff.content_delta.empty() && !state.text_block_started) {
             state.text_block_started = true;
+            state.oai_resp_output_index++;
         }
         if (!diff.tool_call_delta.name.empty()) {
             state.oai_resp_fc_id = diff.tool_call_delta.id;
+            state.oai_resp_output_index++;
         }
     }
 }
@@ -1538,6 +1542,7 @@ json server_task_result_cmpl_partial::to_json_oaicompat_resp() {
     std::vector<json> events;
 
     if (n_decoded == 1) {
+        const std::time_t t = std::time(0);
         events.push_back(json {
             {"event", "response.created"},
             {"data", json {
@@ -1546,7 +1551,7 @@ json server_task_result_cmpl_partial::to_json_oaicompat_resp() {
                     {"id",         oai_resp_id},
                     {"object",     "response"},
                     {"status",     "in_progress"},
-                    {"created_at", std::time(0)},
+                    {"created_at", t},
                     {"model",      oaicompat_model},
                 }},
             }},
@@ -1559,7 +1564,7 @@ json server_task_result_cmpl_partial::to_json_oaicompat_resp() {
                     {"id",         oai_resp_id},
                     {"object",     "response"},
                     {"status",     "in_progress"},
-                    {"created_at", std::time(0)},
+                    {"created_at", t},
                     {"model",      oaicompat_model},
                 }},
             }},
@@ -1589,9 +1594,10 @@ json server_task_result_cmpl_partial::to_json_oaicompat_resp() {
             events.push_back(json {
                 {"event", "response.reasoning_text.delta"},
                 {"data", json {
-                    {"type",    "response.reasoning_text.delta"},
-                    {"delta",   diff.reasoning_content_delta},
-                    {"item_id", oai_resp_reasoning_id},
+                    {"type",         "response.reasoning_text.delta"},
+                    {"delta",        diff.reasoning_content_delta},
+                    {"item_id",      oai_resp_reasoning_id},
+                    {"output_index", oai_resp_output_index - 1},
                 }},
             });
         }
