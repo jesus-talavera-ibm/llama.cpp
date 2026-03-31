@@ -2868,16 +2868,24 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
             .run();
     }
 
-    // MiMo-VL / Hermes 3 / Qwen 2.5 (Common <tool_call> JSON format)
+    // MiMo-VL / Hermes 3 / Qwen 2.5 / Granite 4.0 (Common <tool_call> JSON format)
     for (const auto & path :
          { "models/templates/MiMo-VL.jinja", "models/templates/NousResearch-Hermes-3-Llama-3.1-8B-tool_use.jinja",
-           "models/templates/Qwen-Qwen2.5-7B-Instruct.jinja" }) {
+           "models/templates/Qwen-Qwen2.5-7B-Instruct.jinja",
+           "models/templates/ibm-granite-granite-4.0.jinja" }) {
         auto tst = peg_tester(path, detailed_debug);
         tst.test("Hello, world!\nWhat's up?").expect(message_assist).expect_reconstruction().run();
         tst.test("<tool_call>\n{\"name\": \"special_function\", \"arguments\": {\"arg1\": 1}}\n</tool_call>")
             .tools({ special_function_tool })
             .expect(message_assist_call)
             .expect_reconstruction()
+            .run();
+        tst.test(
+               "Hello, world!\nWhat's up?<tool_call>\n"
+               "{\"name\": \"special_function\", \"arguments\": {\"arg1\": 1}}\n"
+               "</tool_call>")
+            .tools({ special_function_tool })
+            .expect(message_assist_call_content)
             .run();
     }
 
