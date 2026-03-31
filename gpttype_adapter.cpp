@@ -625,7 +625,11 @@ void ContextRewind(std::vector<int> &embd, std::vector<int> &current_context_tok
 
     if (file_format == FileFormat::GGUF_GENERIC)
     {
-        safe_memory_seq_rm(llama_ctx_v4, 0, n_past, -1);
+        if(!safe_memory_seq_rm(llama_ctx_v4, 0, n_past, -1))
+        {
+            //full clear happened (hybrid/recurrent model fallback) - reset n_past
+            n_past = 0;
+        }
         if(draft_ctx)
         {
             safe_memory_seq_rm(draft_ctx, 0, n_past, -1);
@@ -2006,12 +2010,17 @@ bool DoContextShifting(llama_context * ctx, llama_context * draft_ctx, std::vect
     //Hybrid models (e.g. Granite 4) have recurrent/SSM layers whose state cannot be
     //partially erased. The seq_rm and seq_add operations used below would fail or
     //corrupt state on those layers.
-    if(!dryrun && ctx != nullptr)
+    //Use the global context for the arch check so this works in both dryrun and
+    //non-dryrun paths (CanContextShift calls with ctx=nullptr, dryrun=true).
+    if(file_format == FileFormat::GGUF_GENERIC && llama_ctx_v4 != nullptr)
     {
-        const llama_model * mdl = llama_get_model(ctx);
+        const llama_model * mdl = llama_get_model(llama_ctx_v4);
         if(llama_model_is_recurrent(mdl) || llama_model_is_hybrid(mdl))
         {
-            printf("\nWARNING: Context shifting is not supported for recurrent/hybrid models! Skipping.\n");
+            if(!dryrun)
+            {
+                printf("\nWARNING: Context shifting is not supported for recurrent/hybrid models! Skipping.\n");
+            }
             return false;
         }
     }
@@ -2069,7 +2078,12 @@ bool DoContextShifting(llama_context * ctx, llama_context * draft_ctx, std::vect
             {
                 //extract the unwanted tokens out from context and KV
                 int diff = found - trimstart;
-                safe_memory_seq_rm(ctx, 0, trimstart, trimstart + diff);
+                if(!safe_memory_seq_rm(ctx, 0, trimstart, trimstart + diff))
+                {
+                    //partial removal failed (hybrid/recurrent model) - abort shifting
+                    //to avoid running seq_add on inconsistent/cleared memory state
+                    return false;
+                }
                 llama_memory_seq_add(llama_get_memory(ctx), 0, trimstart + diff, -1, -diff);
                 if(draft_ctx)
                 {
