@@ -517,6 +517,33 @@ static void GetOverlappingTokenSequences(const std::string& str, std::unordered_
     }
 }
 
+// Safe wrapper for llama_memory_seq_rm that handles hybrid/recurrent models.
+// For hybrid models, partial range removal (p0 > 0) is not supported by
+// recurrent memory layers (they can't partially erase state).
+// This function falls back to a full memory clear when partial removal fails.
+static bool safe_memory_seq_rm(llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1)
+{
+    if(ctx == nullptr) return true;
+    llama_memory_t mem = llama_get_memory(ctx);
+    bool result = llama_memory_seq_rm(mem, seq_id, p0, p1);
+    if(!result)
+    {
+        //Partial removal failed (likely a hybrid/recurrent model).
+        //For recurrent/hybrid models, partial state erasure is not possible.
+        //Fall back to a full clear so the model can re-process from scratch.
+        const llama_model * mdl = llama_get_model(ctx);
+        if(llama_model_is_recurrent(mdl) || llama_model_is_hybrid(mdl))
+        {
+            if(debugmode >= 1 && !is_quiet)
+            {
+                printf("\n[Hybrid/Recurrent model: partial seq_rm(%d,%d) failed, performing full memory clear]\n", p0, p1);
+            }
+            llama_memory_clear(mem, true);
+        }
+    }
+    return result;
+}
+
 // Function to convert a UTF-8 encoded string to lowercase
 static std::string toLowerCase(const std::string& str) {
     std::string result;
@@ -598,10 +625,14 @@ void ContextRewind(std::vector<int> &embd, std::vector<int> &current_context_tok
 
     if (file_format == FileFormat::GGUF_GENERIC)
     {
-        llama_memory_seq_rm(llama_get_memory(llama_ctx_v4), 0, n_past, -1);
+        if(!safe_memory_seq_rm(llama_ctx_v4, 0, n_past, -1))
+        {
+            //full clear happened (hybrid/recurrent model fallback) - reset n_past
+            n_past = 0;
+        }
         if(draft_ctx)
         {
-            llama_memory_seq_rm(llama_get_memory(draft_ctx), 0, n_past, -1);
+            safe_memory_seq_rm(draft_ctx, 0, n_past, -1);
         }
     }
 
@@ -1975,6 +2006,25 @@ bool FullyContainedPrefix(std::vector<int> &sequence1, std::vector<int> &sequenc
 //returns true if contextshift is doable, executes it if dryrun is false
 bool DoContextShifting(llama_context * ctx, llama_context * draft_ctx, std::vector<int> &current_context_tokens, std::vector<int> &new_context_tokens, const int genamt, const int nctx, bool dryrun)
 {
+    //Guard: Context shifting must not be used with hybrid or recurrent models.
+    //Hybrid models (e.g. Granite 4) have recurrent/SSM layers whose state cannot be
+    //partially erased. The seq_rm and seq_add operations used below would fail or
+    //corrupt state on those layers.
+    //Use the global context for the arch check so this works in both dryrun and
+    //non-dryrun paths (CanContextShift calls with ctx=nullptr, dryrun=true).
+    if(file_format == FileFormat::GGUF_GENERIC && llama_ctx_v4 != nullptr)
+    {
+        const llama_model * mdl = llama_get_model(llama_ctx_v4);
+        if(llama_model_is_recurrent(mdl) || llama_model_is_hybrid(mdl))
+        {
+            if(!dryrun)
+            {
+                printf("\nWARNING: Context shifting is not supported for recurrent/hybrid models! Skipping.\n");
+            }
+            return false;
+        }
+    }
+
     //scan from start old and new ctx, until first mismatch found, save as p0
     //check remaining old and new ctx for longest common subseq, which needs to be at 256 tokens
     //test: longest common subseq (LCQ) MUST start within 0 tokens from end of memory, otherwise purge fails
@@ -2028,11 +2078,16 @@ bool DoContextShifting(llama_context * ctx, llama_context * draft_ctx, std::vect
             {
                 //extract the unwanted tokens out from context and KV
                 int diff = found - trimstart;
-                llama_memory_seq_rm(llama_get_memory(ctx), 0, trimstart, trimstart + diff);
+                if(!safe_memory_seq_rm(ctx, 0, trimstart, trimstart + diff))
+                {
+                    //partial removal failed (hybrid/recurrent model) - abort shifting
+                    //to avoid running seq_add on inconsistent/cleared memory state
+                    return false;
+                }
                 llama_memory_seq_add(llama_get_memory(ctx), 0, trimstart + diff, -1, -diff);
                 if(draft_ctx)
                 {
-                    llama_memory_seq_rm(llama_get_memory(draft_ctx), 0, trimstart, trimstart + diff);
+                    safe_memory_seq_rm(draft_ctx, 0, trimstart, trimstart + diff);
                     llama_memory_seq_add(llama_get_memory(draft_ctx), 0, trimstart + diff, -1, -diff);
                 }
                 for (size_t i = trimstart + diff; i < current_context_tokens.size() - 1; i++)
@@ -2593,10 +2648,24 @@ ModelLoadResult gpttype_load_model(const load_model_inputs inputs, FileFormat in
               //prepare savestate slots
         savestate_limit = inputs.smartcacheslots;
 
-        //if RNN model AND shifting and fastforward is on, enable smartcache
+        //if RNN or Hybrid model AND shifting and fastforward is on, enable smartcache
+        //Hybrid models (e.g. Granite 4) have both attention and recurrent layers.
+        //Context shifting uses llama_memory_seq_rm/seq_add with partial ranges, which
+        //is not supported by recurrent memory (it cannot partially erase state).
+        //We disable context shifting and enable smartcache instead to handle context management.
         if((llama_model_is_recurrent(llamamodel) || llama_model_is_hybrid(llamamodel)) && kcpp_data->use_fastforward && kcpp_data->use_contextshift)
         {
-            printf("RNN or Hyrbid model with FF and shifting flags enabled - SmartCache will be enabled with extra slots. Disable CtxShift if you do not want this.\n",savestate_limit);
+            if(llama_model_is_hybrid(llamamodel))
+            {
+                printf("Hybrid model detected (has both attention and recurrent/SSM layers).\n");
+                printf("Context shifting is not compatible with recurrent state layers and will be disabled.\n");
+            }
+            else
+            {
+                printf("Recurrent model detected.\n");
+            }
+            printf("SmartCache will be enabled with extra slots for state management. Disable CtxShift if you do not want this.\n");
+            kcpp_data->use_contextshift = false;
             kcpp_data->smartcache = true;
             savestate_limit += 3;
         }
@@ -4296,11 +4365,17 @@ generation_outputs gpttype_generate(const generation_inputs inputs)
             }
             else
             {
-                llama_memory_seq_rm(llama_get_memory(llama_ctx_v4), 0, n_past, -1);
+                bool rm_ok = safe_memory_seq_rm(llama_ctx_v4, 0, n_past, -1);
+                if(!rm_ok)
+                {
+                    //partial removal failed and full clear was done (hybrid/recurrent model)
+                    //reset n_past since the entire memory was cleared
+                    n_past = 0;
+                }
             }
             if(draft_ctx)
             {
-                llama_memory_seq_rm(llama_get_memory(draft_ctx), 0, n_past, -1);
+                safe_memory_seq_rm(draft_ctx, 0, n_past, -1);
             }
         }
     }
@@ -4983,9 +5058,9 @@ generation_outputs gpttype_generate(const generation_inputs inputs)
             //if we have somehow skipped ahead (e.g drafting), ensure that all tokens after npast are purged
             if (file_format == FileFormat::GGUF_GENERIC && draft_used)
             {
-                llama_memory_seq_rm(llama_get_memory(llama_ctx_v4), 0, n_past, -1);
+                safe_memory_seq_rm(llama_ctx_v4, 0, n_past, -1);
                 if (draft_ctx) {
-                    llama_memory_seq_rm(llama_get_memory(draft_ctx), 0, n_past, -1);
+                    safe_memory_seq_rm(draft_ctx, 0, n_past, -1);
                 }
             }
 
